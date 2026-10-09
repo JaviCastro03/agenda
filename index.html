@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Agenda">
+<meta name="theme-color" content="#fbf6f4">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+<title>Agenda</title>
+</head>
+<body>
+<div id="app"><main id="view"></main></div>
+
+<button class="fab" id="fab" data-action="new" aria-label="Nueva cita">＋</button>
+
+<nav id="tabs">
+  <button data-action="tab" data-tab="agenda"><span>📅</span>Agenda</button>
+  <button data-action="tab" data-tab="income"><span>💶</span>Ingresos</button>
+  <button data-action="tab" data-tab="settings"><span>⚙️</span>Ajustes</button>
+</nav>
+
+<div id="sheet-root"></div>
+<input type="file" id="imp" accept=".json,application/json" hidden>
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
