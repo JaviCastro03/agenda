@@ -13,7 +13,7 @@ const DEFAULT_TEMPLATE =
 function normalize(d) {
   d = d && typeof d === 'object' ? d : {};
   const s = Object.assign(
-    { business: '', country: '34', template: DEFAULT_TEMPLATE, leadHours: 24, autoIcs: true, lastBackup: '' },
+    { business: '', country: '34', template: DEFAULT_TEMPLATE, leadHours: 24, autoIcs: true, icsMode: 'shortcut', shortcutName: 'Aviso Agenda', lastBackup: '' },
     d.settings || {}
   );
   const appts = (Array.isArray(d.appts) ? d.appts : []).filter(a => a && a.id && a.date && a.time);
@@ -104,11 +104,15 @@ function icsDT(date, time, addMin) {
   const dt = new Date(y, m - 1, d, hh, mm + (addMin || 0));
   return `${dt.getFullYear()}${pad(dt.getMonth() + 1)}${pad(dt.getDate())}T${pad(dt.getHours())}${pad(dt.getMinutes())}00`;
 }
-function buildIcs(a) {
+function avisoTitle(a) {
   const lead = Math.max(1, Number(db.settings.leadHours) || 24);
   const first = (a.name || 'cliente').trim().split(/\s+/)[0];
   const when = lead === 24 ? 'de mañana' : 'del ' + fmtShort(a.date);
-  const title = `Recordar a ${first} su cita ${when} a las ${a.time}`;
+  return `Recordar a ${first} su cita ${when} a las ${a.time}`;
+}
+function buildIcs(a) {
+  const lead = Math.max(1, Number(db.settings.leadHours) || 24);
+  const title = avisoTitle(a);
   const desc = [`Cliente: ${a.name}`, a.phone ? `Tel: ${a.phone}` : '', a.service ? `Servicio: ${a.service}` : '', `Cita: ${fmtLong(a.date)} a las ${a.time}`]
     .filter(Boolean).join('\n');
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -140,6 +144,28 @@ async function giveFile(name, type, text) {
   a.href = url; a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+
+/* ---------- Aviso con Atajos de iOS ---------- */
+function fmtLocal(date, time, addMin) {
+  const [y, m, d] = date.split('-').map(Number);
+  const [hh, mm] = time.split(':').map(Number);
+  const dt = new Date(y, m - 1, d, hh, mm + (addMin || 0));
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+}
+function shortcutUrl(text) {
+  const name = String(db.settings.shortcutName || '').trim() || 'Aviso Agenda';
+  return 'shortcuts://run-shortcut?name=' + encodeURIComponent(name) + '&input=text&text=' + encodeURIComponent(text);
+}
+function sendAviso(a) {
+  if (db.settings.icsMode === 'share') {
+    giveFile(`aviso-${a.date}-${a.time.replace(':', '')}.ics`, 'text/calendar', buildIcs(a));
+    return;
+  }
+  const lead = Math.max(1, Number(db.settings.leadHours) || 24);
+  const notes = [a.name, a.phone ? 'Tel: ' + a.phone : '', a.service || ''].filter(Boolean).join(' · ');
+  const text = [avisoTitle(a), fmtLocal(a.date, a.time, -lead * 60), notes].join('\n');
+  window.location.href = shortcutUrl(text);
 }
 
 /* ---------- Estado de pantalla ---------- */
@@ -290,7 +316,16 @@ function renderSettings() {
       <label>Aviso al Calendario (horas antes)
         <input name="leadHours" type="number" inputmode="numeric" min="1" max="168" value="${esc(s.leadHours)}"></label>
     </div>
-    <label class="check"><input type="checkbox" name="autoIcs" ${s.autoIcs ? 'checked' : ''}> Al crear una cita, preparar el aviso para el Calendario</label>
+    <label class="check"><input type="checkbox" name="autoIcs" ${s.autoIcs ? 'checked' : ''}> Al crear una cita, crear el aviso en el Calendario</label>
+    <label>Cómo crear el aviso
+      <select name="icsMode">
+        <option value="shortcut" ${s.icsMode !== 'share' ? 'selected' : ''}>Atajo de iOS (automático)</option>
+        <option value="share" ${s.icsMode === 'share' ? 'selected' : ''}>Compartir archivo (manual)</option>
+      </select></label>
+    <label>Nombre del atajo
+      <input name="shortcutName" value="${esc(s.shortcutName)}" placeholder="Aviso Agenda"></label>
+    <div class="btnrow" style="margin:-2px 0 6px"><button type="button" class="btn ghost" data-action="testshortcut">Probar atajo (aviso en 2 min)</button></div>
+    <p class="hint">Crea el atajo una vez en la app Atajos con ese nombre exacto y pulsa «Probar atajo». Si funciona, te sonará un aviso en 2 minutos.</p>
     <label>Mensaje de WhatsApp
       <textarea name="template" id="tpl" rows="5">${esc(s.template)}</textarea></label>
     <p class="hint">Puedes usar: {nombre} {cuando} {fecha} {hora} {servicio} {negocio}. {cuando} pone «mañana», «hoy» o el día de la semana.</p>
@@ -340,7 +375,7 @@ function apptSheet(id) {
       <datalist id="svc">${services.map(s => `<option value="${esc(s)}">`).join('')}</datalist></label>
     <label>Duración<select name="dur">${durs.map(m => `<option value="${m}" ${Number(v.dur) === m ? 'selected' : ''}>${m >= 60 ? (Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : '')) : m + ' min'}</option>`).join('')}</select></label>
     <label>Notas<textarea name="notes" placeholder="Alergias, preferencias…">${esc(v.notes)}</textarea></label>
-    <label class="check"><input type="checkbox" name="ics" ${!a && db.settings.autoIcs ? 'checked' : ''}> Preparar aviso para el Calendario (${Number(db.settings.leadHours) || 24} h antes)</label>
+    <label class="check"><input type="checkbox" name="ics" ${!a && db.settings.autoIcs ? 'checked' : ''}> Crear aviso en el Calendario (${Number(db.settings.leadHours) || 24} h antes)</label>
     <div class="btnrow">
       ${a ? '<button type="button" class="btn danger" data-action="del" data-id="' + a.id + '">Eliminar</button>' : ''}
       <button type="submit" class="btn primary">Guardar</button>
@@ -421,9 +456,10 @@ function saveAppt(f) {
     db.appts.push(a);
   }
   save();
-  if (fd.get('ics') === 'on') giveFile(`aviso-${a.date}-${a.time.replace(':', '')}.ics`, 'text/calendar', buildIcs(a));
+  const wantAviso = fd.get('ics') === 'on';
   state.date = data.date; state.mode = 'day'; state.tab = 'agenda';
   closeSheet(); render(); toast('Cita guardada');
+  if (wantAviso) sendAviso(a);
 }
 function savePay(f) {
   const a = find(state.sheet && state.sheet.id);
@@ -443,6 +479,8 @@ function saveSettings(f) {
   s.country = String(fd.get('country') || '').replace(/\D/g, '') || '34';
   s.leadHours = Math.min(168, Math.max(1, parseInt(fd.get('leadHours'), 10) || 24));
   s.autoIcs = fd.get('autoIcs') === 'on';
+  s.icsMode = fd.get('icsMode') === 'share' ? 'share' : 'shortcut';
+  s.shortcutName = String(fd.get('shortcutName') || '').trim() || 'Aviso Agenda';
   s.template = String(fd.get('template') || '').trim() || DEFAULT_TEMPLATE;
   save(); render(); toast('Ajustes guardados');
 }
@@ -478,7 +516,7 @@ document.addEventListener('click', e => {
     }
     case 'ics': {
       const a = find(id);
-      if (a) giveFile(`aviso-${a.date}-${a.time.replace(':', '')}.ics`, 'text/calendar', buildIcs(a));
+      if (a) sendAviso(a);
       return;
     }
     case 'del': {
@@ -486,6 +524,12 @@ document.addEventListener('click', e => {
       if (a && confirm(`¿Eliminar la cita de ${a.name}?`)) {
         db.appts = db.appts.filter(x => x.id !== id); save(); closeSheet(); render(); toast('Cita eliminada');
       }
+      return;
+    }
+    case 'testshortcut': {
+      const n = new Date();
+      const text = ['Prueba de aviso de la agenda', fmtLocal(todayStr(), pad(n.getHours()) + ':' + pad(n.getMinutes()), 2), 'Si ves este aviso, el atajo funciona'].join('\n');
+      window.location.href = shortcutUrl(text);
       return;
     }
     case 'resettpl': { const t = $('#tpl'); if (t) t.value = DEFAULT_TEMPLATE; return; }

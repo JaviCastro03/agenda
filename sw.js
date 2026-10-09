@@ -1,6 +1,6 @@
 /* Service worker: la app funciona sin conexión.
    Si cambias archivos, sube el número de versión para forzar la actualización. */
-const CACHE = 'agenda-v1';
+const CACHE = 'agenda-v2';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
